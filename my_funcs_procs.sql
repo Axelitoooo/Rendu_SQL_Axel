@@ -77,12 +77,10 @@ IS
   random_date DATE;
 BEGIN
   FOR i IN 1..NB_WORKERS LOOP
-    -- Générer une date aléatoire entre le 01/01/2065 et le 01/01/2070
     SELECT TO_DATE(TRUNC(DBMS_RANDOM.VALUE(TO_CHAR(DATE '2065-01-01','J'), TO_CHAR(DATE '2070-01-01','J'))), 'J') 
     INTO random_date 
     FROM DUAL;
 
-    -- Insérer le nouveau worker dans la table WORKERS_FACTORY_1
     INSERT INTO WORKERS_FACTORY_1 (id, first_name, last_name, age, first_day, last_day, factory_id)
     VALUES (
       WORKERS_FACTORY_1_SEQ.NEXTVAL, 
