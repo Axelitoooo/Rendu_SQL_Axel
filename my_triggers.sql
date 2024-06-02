@@ -1,40 +1,88 @@
-CREATE OR REPLACE TRIGGER trg_all_workers_elapsed_insert
+CREATE OR REPLACE TRIGGER trg_insert_all_workers_elapsed
 INSTEAD OF INSERT ON ALL_WORKERS_ELAPSED
 FOR EACH ROW
 BEGIN
-  INSERT INTO WORKERS (worker_id, first_name, last_name, start_date, factory_id)
-  VALUES (:NEW.worker_id, :NEW.first_name, :NEW.last_name, :NEW.start_date, :NEW.factory_id);
+  IF :NEW.age IS NOT NULL THEN
+    INSERT INTO WORKERS_FACTORY_1 (first_name, last_name, age, first_day)
+    VALUES (:NEW.first_name, :NEW.last_name, :NEW.age, :NEW.start_date);
+  ELSE
+    INSERT INTO WORKERS_FACTORY_2 (first_name, last_name, start_date)
+    VALUES (:NEW.first_name, :NEW.last_name, :NEW.start_date);
+  END IF;
 END;
-/
 
-CREATE OR REPLACE TRIGGER trg_robot_creation
+CREATE OR REPLACE TRIGGER trg_no_update_delete_all_workers_elapsed
+INSTEAD OF UPDATE OR DELETE ON ALL_WORKERS_ELAPSED
+FOR EACH ROW
+BEGIN
+  RAISE_APPLICATION_ERROR(-20001, 'Different.');
+END;
+
+CREATE OR REPLACE TRIGGER trg_new_robot_audit
 AFTER INSERT ON ROBOTS
 FOR EACH ROW
 BEGIN
-  INSERT INTO AUDIT_ROBOT (robot_id, creation_date)
-  VALUES (:NEW.robot_id, SYSDATE);
+  INSERT INTO AUDIT_ROBOT (robot_id, created_at)
+  VALUES (:NEW.id, SYSDATE);
 END;
-/
 
-CREATE OR REPLACE TRIGGER trg_factories_consistency
-BEFORE INSERT OR UPDATE OR DELETE ON ROBOTS_FACTORIES
+CREATE OR REPLACE TRIGGER trg_check_factories_count_robots
+BEFORE INSERT OR UPDATE OR DELETE ON ROBOTS
 DECLARE
-  num_factories NUMBER;
-  num_tables NUMBER;
+  v_factory_count NUMBER;
+  v_table_count NUMBER;
 BEGIN
-  SELECT COUNT(*) INTO num_factories FROM FACTORIES;
-  SELECT COUNT(*) INTO num_tables FROM all_tables WHERE table_name LIKE 'WORKERS_FACTORY_%';
-  
-  IF num_factories != num_tables THEN
-    RAISE_APPLICATION_ERROR(-20001, 'The number of factories does not match the number of WORKERS_FACTORY tables.');
+  -- Compter le nombre d'usines
+  SELECT COUNT(*) INTO v_factory_count FROM FACTORIES;
+
+  SELECT COUNT(*) INTO v_table_count 
+  FROM USER_TABLES 
+  WHERE TABLE_NAME LIKE 'WORKERS_FACTORY_%';
+
+  IF v_factory_count != v_table_count THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Mismatch between number of factories and WORKERS_FACTORY tables.');
   END IF;
 END;
-/
 
-CREATE OR REPLACE TRIGGER trg_worker_departure
-AFTER UPDATE OF departure_date ON WORKERS
-FOR EACH ROW
+CREATE OR REPLACE TRIGGER trg_check_factories_count_robots_from_factory
+BEFORE INSERT OR UPDATE OR DELETE ON ROBOTS_FROM_FACTORY
+DECLARE
+  v_factory_count NUMBER;
+  v_table_count NUMBER;
 BEGIN
-  :NEW.employment_duration := :NEW.departure_date - :OLD.start_date;
+  -- Compter le nombre d'usines
+  SELECT COUNT(*) INTO v_factory_count FROM FACTORIES;
+
+  SELECT COUNT(*) INTO v_table_count 
+  FROM USER_TABLES 
+  WHERE TABLE_NAME LIKE 'WORKERS_FACTORY_%';
+
+  IF v_factory_count != v_table_count THEN
+    RAISE_APPLICATION_ERROR(-20002, 'Mismatch between number of factories and WORKERS_FACTORY tables.');
+  END IF;
 END;
-/
+
+
+CREATE OR REPLACE TRIGGER trg_calculate_duration_factory_1
+BEFORE UPDATE OF last_day ON WORKERS_FACTORY_1
+FOR EACH ROW
+DECLARE
+  duration_in_factory NUMBER;
+BEGIN
+  IF :NEW.last_day IS NOT NULL THEN
+    duration_in_factory := :NEW.last_day - :OLD.first_day;
+  END IF;
+END;
+
+CREATE OR REPLACE TRIGGER trg_calculate_duration_factory_2
+BEFORE UPDATE OF end_date ON WORKERS_FACTORY_2
+FOR EACH ROW
+DECLARE
+  duration_in_factory NUMBER;
+BEGIN
+  IF :NEW.end_date IS NOT NULL THEN
+    duration_in_factory := :NEW.end_date - :OLD.start_date;
+  END IF;
+END;
+
+
